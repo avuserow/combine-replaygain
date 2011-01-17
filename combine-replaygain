@@ -98,9 +98,9 @@ for my $file (@ARGV) {
 					. " ffmpeg!\n";
 			}
 
-			my $command = join ' ', 'ffmpeg', '-loglevel', 'quiet', '-i',
-				quotemeta($file), @args, $tempfn;
-			qx{$command 2>/dev/null >/dev/null};
+			my $command = join ' ', 'ffmpeg', '-i', quotemeta($file), @args,
+				$tempfn;
+			qx{$command >/dev/null 2>/dev/null};
 
 			my $value = $FILETYPES{$transcode_to}->({scan => $tempfn});
 
@@ -117,8 +117,8 @@ sub mp3gain {
 		return check_bin('mp3gain');
 	} elsif ($args->{scan}) {
 		my $file  = quotemeta $args->{scan};
-		my($header, $output) = qx{mp3gain -q -s s -o $file 2>/dev/null};
-		my @fields = split /\t/, $output;
+		my($header, @output) = qx{mp3gain -q -s s -o $file};
+		my @fields = split /\t/, $output[0];
 		return $fields[2];
 	}
 }
@@ -162,7 +162,7 @@ sub detect_filetype {
 	my $fn = quotemeta $file;
 	my $out = qx{file $fn};
 
-	if ($out =~ /MPEG ADTS, layer III/i) {
+	if ($out =~ /MPEG ADTS, layer III/i || $out =~ /mp3 encoding/i) {
 		return 'mp3';
 	}
 
