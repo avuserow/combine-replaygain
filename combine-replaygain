@@ -167,7 +167,7 @@ sub detect_filetype {
 	}
 
 	if ($out =~ /MPEG v4/i) {
-		return 'mp4';
+		return 'aac';
 	}
 
 	if ($out =~ /Vorbis audio/i) {

@@ -1,0 +1,47 @@
+combine-replaygain - A Combined ReplayGain Scanner
+
+ReplayGain is cool, but the majority of scanner programs are written for a
+single file type. The only scanners I have found that support all common
+filetypes are built-in to media players like Winamp.
+
+This is a small project intended as a makeshift solution to this problem. It
+detects which scanners you have installed, and uses ffmpeg to convert unknown
+filetypes to one of these.
+
+In addition, this project does _not_ modify your existing files. This is
+intended for use by the Acoustics Music Player, which has the philosophy of not
+modifying music files at all. The main scanner program will only report a list
+of files.
+
+file(1) is used for file type detection. Sometimes mp3 files are not identified
+properly, which will result in them being transcoded (possibly to a mp3!) and
+then scanned. This is just slower and slightly less accurate.
+
+In the future, a wrapper script to write tags to the individual files may exist.
+Patches welcome.
+
+Scanners supported directly:
+- mp3gain (MPEG Layer III audio)
+- vorbisgain (ogg vorbis audio)
+
+Scanners that exist but are NOT supported yet:
+- aacgain (MPEG-4 audio), just needs to be implemented
+- WaveGain (uncompressed WAVE audio), just needs to be implemented
+
+Scanners for uncommon filetypes which are unlikely to be implemented:
+- wvgain (WavPack files)
+- musepack
+
+Scanners that are unsuitable for use:
+- metaflac (FLAC audio), CANNOT be implemented as-is, since it always writes to
+  the file
+- Winamp, foobar2000, QuuxPlayer, MediaMonkey, etc
+
+TODO:
+- parallel mode
+- implement aacgain, wavegain
+- better file type detection
+- ignore common non-music files found in music directories (album art,
+  directories, text files)
+- wrapper script for writing tags
+- better logging and error checking
