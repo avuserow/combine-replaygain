@@ -48,8 +48,8 @@ print "\n";
 for my $file (@ARGV) {
 	my $ft = detect_filetype($file);
 	$ft = 'default' unless exists $FILETYPES{$ft};
-	print $ft, "\t", $file, "\n";
-	#print $FILETYPES{$ft}->({scan => $file}), "\t", $file, "\n";
+	#print $ft, "\t", $file, "\n";
+	print $FILETYPES{$ft}->({scan => $file}), "\t", $file, "\n";
 }
 
 {
