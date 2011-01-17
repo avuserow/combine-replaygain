@@ -1,0 +1,187 @@
+#!/usr/bin/perl -w
+
+use strict;
+
+# find what filetypes we support
+my @TRANSCODE_ORDER = qw(wav mp3 flac vorbis aac);
+
+# Assumption: ffmpeg can transcode all of these files below to the files above
+# (if it cannot decode a file type, we skip that at runtime)
+
+# ffmpeg(1) is used for transcoding. file(1) is used for file type detection.
+# vorbisgain, wavegain, mp3gain, and aacgain are used if available.
+
+my %FILETYPES = (
+	vorbis  => \&vorbisgain,
+	mp3     => \&mp3gain,
+	aac     => \&aacgain,
+	flac    => \&transcodegain,
+	wav     => \&wavegain,
+	default => \&transcodegain,
+);
+
+for my $type (keys %FILETYPES) {
+	# ask the worker if it is okay
+	if ($FILETYPES{$type} && $FILETYPES{$type}->({detect => 1})) {
+		# we're okay
+	} else {
+		$FILETYPES{$type} = \&transcodegain;
+	}
+}
+
+# make sure we're still okay to transcode
+unless (transcodegain({transcode_test => 1})) {
+	for my $type (keys %FILETYPES) {
+		delete $FILETYPES{$type} if $FILETYPES{$type} == \&transcodegain;
+	}
+}
+
+print "File types supported natively:\n\t";
+print join ' ', grep {$FILETYPES{$_} != \&transcodegain} keys %FILETYPES;
+if (transcodegain({transcode_test => 1})) {
+	print "\nThe following will be transcoded to ";
+	print transcodegain({get_transcode_to => 1}), ":\n\t";
+	print join ' ', grep {$FILETYPES{$_} == \&transcodegain} keys %FILETYPES;
+}
+print "\n";
+
+for my $file (@ARGV) {
+	my $ft = detect_filetype($file);
+	$ft = 'default' unless exists $FILETYPES{$ft};
+	print $ft, "\t", $file, "\n";
+	#print $FILETYPES{$ft}->({scan => $file}), "\t", $file, "\n";
+}
+
+{
+	my $transcode_to = '';
+	sub transcodegain {
+		my $args = shift;
+		if ($args->{detect}) {
+			return check_bin('ffmpeg');
+		}
+		# TODO: have tests for each codec using ffmpeg -codecs
+		if ($args->{transcode_test}) {
+			return 0 unless check_bin('ffmpeg');
+			for my $type (@TRANSCODE_ORDER) {
+				if ($FILETYPES{$type} && $FILETYPES{$type} != \&transcodegain) {
+					$transcode_to = $type;
+					return 1;
+				}
+			}
+			return 0;
+		}
+		if ($args->{get_transcode_to}) {
+			return $transcode_to;
+		}
+		if ($args->{scan}) {
+			if ($FILETYPES{$transcode_to} == \&transcodegain) {
+				die "ERROR: would transcode to filetype '$transcode_to', \n" .
+				"but this type is handled by transcoding!\n" .
+				"Exiting to avoid infinite loop.";
+			}
+
+			my $file = $args->{scan};
+			my $tempfn = join '-', '/tmp/globgain', $$, rand();
+			my @args;
+			if ($transcode_to eq 'vorbis') {
+				@args = qw(-f ogg -acodec libvorbis);
+			} elsif ($transcode_to eq 'mp3') {
+				@args = qw(-f mp3);
+			} elsif ($transcode_to eq 'aac') {
+				@args = qw(-f mp4);
+			} elsif ($transcode_to eq 'flac') {
+				@args = qw(-f flac);
+			} elsif ($transcode_to eq 'wav') {
+				@args = qw(-f wav);
+			} else {
+				die "don't know how to transcode to type '$transcode_to' using"
+					. " ffmpeg!\n";
+			}
+
+			my $command = join ' ', 'ffmpeg', '-loglevel', 'quiet', '-i',
+				quotemeta($file), @args, $tempfn;
+			qx{$command 2>/dev/null >/dev/null};
+
+			my $value = $FILETYPES{$transcode_to}->({scan => $tempfn});
+
+			unlink $tempfn;
+
+			return $value;
+		}
+	}
+}
+
+sub mp3gain {
+	my $args = shift;
+	if ($args->{detect}) {
+		return check_bin('mp3gain');
+	} elsif ($args->{scan}) {
+		my $file  = quotemeta $args->{scan};
+		my($header, $output) = qx{mp3gain -q -s s -o $file 2>/dev/null};
+		my @fields = split /\t/, $output;
+		return $fields[2];
+	}
+}
+
+sub vorbisgain {
+	my $args = shift;
+	if ($args->{detect}) {
+		return check_bin('vorbisgain');
+	} elsif ($args->{scan}) {
+		my $file  = quotemeta $args->{scan};
+		my @lines = qx{vorbisgain -d $file 2>/dev/null};
+		my @out   = split /\|/, $lines[-1];
+		my($db)   = $out[0] =~ /([+-]\d+\.\d+)/;
+		return $db;
+	}
+}
+
+sub aacgain {
+	# TODO
+	return;
+}
+
+sub wavegain {
+	# TODO
+	return;
+}
+
+sub check_bin {
+	my $bin = shift;
+	for my $dir (split /:/, $ENV{PATH}) {
+		if (-x "$dir/$bin") {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+sub detect_filetype {
+	my $file = shift;
+
+	my $fn = quotemeta $file;
+	my $out = qx{file $fn};
+
+	if ($out =~ /MPEG ADTS, layer III/i) {
+		return 'mp3';
+	}
+
+	if ($out =~ /MPEG v4/i) {
+		return 'mp4';
+	}
+
+	if ($out =~ /Vorbis audio/i) {
+		return 'vorbis';
+	}
+
+	if ($out =~ /FLAC/i) {
+		return 'flac';
+	}
+
+	if ($out =~ /WAVE/i) {
+		return 'wav';
+	}
+
+	# We only need to be right most of the time. :)
+	return 'default';
+}
